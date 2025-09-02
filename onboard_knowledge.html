@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Enjo Knowledge Onboarding</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <style>
+      .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 50;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+      const { useState, useRef, useEffect } = React;
+
+      const LucideIcon = ({ iconName, ...props }) => {
+        const Icon = lucide.icons[iconName];
+        if (!Icon) {
+          return null;
+        }
+        return <Icon {...props} />;
+      };
+
+      const Globe = (props) => <LucideIcon iconName="globe" {...props} />;
+      const Upload = (props) => <LucideIcon iconName="upload" {...props} />;
+      const FileText = (props) => (
+        <LucideIcon iconName="file-text" {...props} />
+      );
+      const Check = (props) => <LucideIcon iconName="check" {...props} />;
+      const X = (props) => <LucideIcon iconName="x" {...props} />;
+      const Loader2 = (props) => <LucideIcon iconName="loader-2" {...props} />;
+      const Link = (props) => <LucideIcon iconName="link" {...props} />;
+      const ChevronRight = (props) => (
+        <LucideIcon iconName="chevron-right" {...props} />
+      );
+      const ChevronDown = (props) => (
+        <LucideIcon iconName="chevron-down" {...props} />
+      );
+
+      const KnowledgeOnboarding = () => {
+        const [activeSource, setActiveSource] = useState("website");
+        const [websiteUrl, setWebsiteUrl] = useState("https://docs.enjo.ai");
+        const [singlePageUrl, setSinglePageUrl] = useState("");
+        const [isProcessing, setIsProcessing] = useState(false);
+        const fileInputRef = useRef(null);
+
+        const [knowledgeSources, setKnowledgeSources] = useState([]);
+        const [websiteInputMode, setWebsiteInputMode] = useState("crawl");
+        const [isWebsiteModalOpen, setIsWebsiteModalOpen] = useState(false);
+        const [modalData, setModalData] = useState(null);
+        const [selectedModalPages, setSelectedModalPages] = useState(new Set());
+        const [crawlStatus, setCrawlStatus] = useState("idle");
+
+        const getDomain = (url) => {
+          try {
+            const domain = new URL(url).hostname;
+            return domain.startsWith("www.") ? domain.substring(4) : domain;
+          } catch (error) {
+            return url;
+          }
+        };
+
+        const mockCrawledPages = [
+          {
+            id: "web-1",
+            url: "https://docs.enjo.ai/help",
+            title: "Help Center",
+            size: 45,
+          },
+          {
+            id: "web-2",
+            url: "https://docs.enjo.ai/help/getting-started",
+            title: "Getting Started Guide",
+            size: 32,
+          },
+          {
+            id: "web-3",
+            url: "https://docs.enjo.ai/help/faq",
+            title: "Frequently Asked Questions",
+            size: 28,
+          },
+          {
+            id: "web-4",
+            url: "https://docs.enjo.ai/help/troubleshooting",
+            title: "Troubleshooting",
+            size: 38,
+          },
+          {
+            id: "web-5",
+            url: "https://docs.enjo.ai/help/api",
+            title: "API Documentation",
+            size: 52,
+          },
+          {
+            id: "web-6",
+            url: "https://docs.enjo.ai/products/pro",
+            title: "Pro Product Page",
+            size: 23,
+          },
+          {
+            id: "web-7",
+            url: "https://docs.enjo.ai/products/starter",
+            title: "Starter Product Page",
+            size: 29,
+          },
+          {
+            id: "web-8",
+            url: "https://docs.enjo.ai/products/integrations",
+            title: "Integrations",
+            size: 41,
+          },
+          {
+            id: "web-9",
+            url: "https://docs.enjo.ai/products/enterprise",
+            title: "Enterprise Product",
+            size: 47,
+          },
+          {
+            id: "web-10",
+            url: "https://docs.enjo.ai/about-us",
+            title: "About Us",
+            size: 34,
+          },
+          {
+            id: "web-11",
+            url: "https://docs.enjo.ai/security",
+            title: "Security & Privacy",
+            size: 26,
+          },
+          {
+            id: "web-12",
+            url: "https://docs.enjo.ai/mobile-app",
+            title: "Mobile App Guide",
+            size: 39,
+          },
+        ];
+
+        // Build hierarchy with proper grouping
+        const buildHierarchy = (pages) => {
+          const groups = {};
+          const singlePages = [];
+
+          // Group pages by their first path segment
+          pages.forEach((page) => {
+            try {
+              const urlPath = new URL(page.url).pathname;
+              const segments = urlPath.split("/").filter((s) => s.length > 0);
+
+              if (segments.length === 0) {
+                // Root page
+                singlePages.push({ ...page, type: "page" });
+              } else if (segments.length === 1) {
+                // First-level page - check if it should be grouped or single
+                const groupKey = segments[0];
+                if (!groups[groupKey]) {
+                  groups[groupKey] = [];
+                }
+                groups[groupKey].push(page);
+              } else {
+                // Multi-level page - group by first segment
+                const groupKey = segments[0];
+                if (!groups[groupKey]) {
+                  groups[groupKey] = [];
+                }
+                groups[groupKey].push(page);
+              }
+            } catch (error) {
+              // If URL parsing fails, treat as single page
+              singlePages.push({ ...page, type: "page" });
+            }
+          });
+
+          const result = [];
+
+          // Process groups
+          Object.entries(groups).forEach(([groupKey, groupPages]) => {
+            if (groupPages.length === 1) {
+              // Single page in group - add as individual page
+              result.push({
+                ...groupPages[0],
+                type: "page",
+                id: groupPages[0].id,
+              });
+            } else {
+              // Multiple pages - create group
+              const totalSize = groupPages.reduce((sum, p) => sum + p.size, 0);
+              result.push({
+                id: `group-${groupKey}`,
+                type: "group",
+                title: groupKey.charAt(0).toUpperCase() + groupKey.slice(1),
+                segment: groupKey,
+                pages: groupPages.map((p) => ({ ...p, type: "page" })),
+                size: totalSize,
+                pageCount: groupPages.length,
+              });
+            }
+          });
+
+          // Add single pages
+          singlePages.forEach((page) => {
+            result.push(page);
+          });
+
+          // Sort: groups first, then single pages
+          result.sort((a, b) => {
+            if (a.type === "group" && b.type === "page") return -1;
+            if (a.type === "page" && b.type === "group") return 1;
+            return (a.title || a.segment || "").localeCompare(
+              b.title || b.segment || ""
+            );
+          });
+
+          return result;
+        };
+
+        const getAllPages = (items) => {
+          let allPages = [];
+          items.forEach((item) => {
+            if (item.type === "page") {
+              allPages.push(item);
+            } else if (item.type === "group" && item.pages) {
+              allPages = allPages.concat(item.pages);
+            }
+          });
+          return allPages;
+        };
+
+        const getGroupPages = (group) => {
+          return group.pages || [];
+        };
+
+        const handleWebsiteCrawl = () => {
+          if (!websiteUrl.trim()) return;
+          setIsProcessing(true);
+          setCrawlStatus("processing");
+
+          setTimeout(() => {
+            const pagesToAdd = mockCrawledPages.map((page) => ({
+              ...page,
+              type: "website_page",
+            }));
+
+            const hierarchy = buildHierarchy(pagesToAdd);
+            const isTooManyPages = pagesToAdd.length > 10;
+
+            const newCrawl = {
+              id: `crawl-${Date.now()}`,
+              type: "crawled_website",
+              url: websiteUrl,
+              pages: pagesToAdd,
+              hierarchy: hierarchy,
+            };
+
+            setModalData(newCrawl);
+
+            // Select first 10 pages by default
+            const allPages = getAllPages(hierarchy);
+            const defaultSelected = new Set(
+              allPages.slice(0, 10).map((p) => p.id)
+            );
+            setSelectedModalPages(defaultSelected);
+
+            if (isTooManyPages) {
+              setCrawlStatus("tooManyPages");
+              setIsWebsiteModalOpen(true);
+            } else {
+              setKnowledgeSources((prevSources) => [...prevSources, newCrawl]);
+              setCrawlStatus("success");
+            }
+            setIsProcessing(false);
+          }, 2000);
+        };
+
+        const handleAddSinglePage = () => {
+          if (!singlePageUrl.trim()) return;
+          setIsProcessing(true);
+
+          setTimeout(() => {
+            const newId = `single-${Date.now()}`;
+            const newPage = {
+              id: newId,
+              type: "single_page",
+              url: singlePageUrl,
+              size: Math.floor(Math.random() * 50) + 10,
+            };
+            setKnowledgeSources((prevSources) => [...prevSources, newPage]);
+            setSinglePageUrl("");
+            setIsProcessing(false);
+          }, 500);
+        };
+
+        const handleFileUpload = (event) => {
+          const files = Array.from(event.target.files);
+          const newFiles = files
+            .map((file) => {
+              const fileSizeKB = Math.round(file.size / 1024);
+              if (fileSizeKB > 400) {
+                alert(
+                  `File "${file.name}" exceeds 400 KB limit and was not added.`
+                );
+                return null;
+              }
+              return {
+                id: `file-${Date.now()}-${file.name}`,
+                type: "file",
+                name: file.name,
+                size: fileSizeKB,
+              };
+            })
+            .filter(Boolean);
+
+          setKnowledgeSources((prevSources) => [...prevSources, ...newFiles]);
+        };
+
+        const removeSource = (id) => {
+          setKnowledgeSources(
+            knowledgeSources.filter((item) => item.id !== id)
+          );
+        };
+
+        const openWebsiteModal = (item) => {
+          setModalData(item);
+          const allPages = getAllPages(item.hierarchy);
+          const selectedPages = new Set(allPages.map((page) => page.id));
+          setSelectedModalPages(selectedPages);
+          setIsWebsiteModalOpen(true);
+        };
+
+        const handleModalSave = () => {
+          const allPages = getAllPages(modalData.hierarchy);
+          const selectedPages = allPages.filter((page) =>
+            selectedModalPages.has(page.id)
+          );
+
+          const updatedItem = {
+            ...modalData,
+            pages: selectedPages,
+            hierarchy: buildHierarchy(selectedPages),
+          };
+
+          setKnowledgeSources((prevSources) => {
+            const newSources = prevSources.filter(
+              (item) => item.id !== updatedItem.id
+            );
+            if (selectedPages.length > 0) {
+              return [...newSources, updatedItem];
+            }
+            return newSources;
+          });
+
+          setCrawlStatus("success");
+          setIsWebsiteModalOpen(false);
+          setModalData(null);
+          setSelectedModalPages(new Set());
+        };
+
+        const toggleModalPageSelection = (itemId, isGroup = false) => {
+          setSelectedModalPages((prev) => {
+            const newSet = new Set(prev);
+
+            if (isGroup) {
+              // Find the group
+              const group = modalData.hierarchy.find(
+                (item) => item.id === itemId && item.type === "group"
+              );
+              if (group) {
+                const groupPageIds = group.pages.map((p) => p.id);
+                const allSelected = groupPageIds.every((id) => newSet.has(id));
+
+                if (allSelected) {
+                  // Unselect all pages in group
+                  groupPageIds.forEach((id) => newSet.delete(id));
+                } else {
+                  // Select all pages in group
+                  groupPageIds.forEach((id) => newSet.add(id));
+                }
+              }
+            } else {
+              // Toggle individual page
+              if (newSet.has(itemId)) {
+                newSet.delete(itemId);
+              } else {
+                newSet.add(itemId);
+              }
+            }
+
+            return newSet;
+          });
+        };
+
+        const getGroupStatus = (group, selectedPages) => {
+          if (!group.pages || group.pages.length === 0) return "none";
+
+          const groupPageIds = group.pages.map((p) => p.id);
+          const selectedCount = groupPageIds.filter((id) =>
+            selectedPages.has(id)
+          ).length;
+
+          if (selectedCount === 0) return "none";
+          if (selectedCount === groupPageIds.length) return "all";
+          return "some";
+        };
+
+        const handleStartTraining = () => {
+          setIsProcessing(true);
+          setTimeout(() => {
+            console.log(
+              "Training started with the following sources:",
+              knowledgeSources
+            );
+            alert("Training started! Check the console for details.");
+            setIsProcessing(false);
+          }, 1000);
+        };
+
+        const isTrainButtonDisabled = () => {
+          return (
+            isProcessing || isWebsiteModalOpen || knowledgeSources.length === 0
+          );
+        };
+
+        const totalSize = knowledgeSources.reduce((sum, item) => {
+          if (item.type === "crawled_website") {
+            return (
+              sum + item.pages.reduce((pageSum, page) => pageSum + page.size, 0)
+            );
+          }
+          return sum + item.size;
+        }, 0);
+
+        // Hierarchical Page List Component
+        const HierarchicalPageList = ({ items, onSelect, selectedPages }) => {
+          const [expandedGroups, setExpandedGroups] = useState(new Set());
+          const groupRefs = useRef({});
+
+          useEffect(() => {
+            items.forEach((item) => {
+              if (item.type === "group" && groupRefs.current[item.id]) {
+                const status = getGroupStatus(item, selectedPages);
+                groupRefs.current[item.id].indeterminate = status === "some";
+              }
+            });
+          }, [items, selectedPages]);
+
+          const toggleExpand = (id) => {
+            setExpandedGroups((prev) => {
+              const newSet = new Set(prev);
+              if (newSet.has(id)) {
+                newSet.delete(id);
+              } else {
+                newSet.add(id);
+              }
+              return newSet;
+            });
+          };
+
+          return (
+            <div className="space-y-2">
+              {items.map((item) => {
+                if (item.type === "page") {
+                  // Render individual page
+                  return (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between p-3 hover:bg-gray-100 rounded-lg cursor-pointer"
+                      onClick={() => {
+                        e.stopPropagation();
+                        onSelect(item.id, false);
+                      }}
+                    >
+                      <div className="flex items-center space-x-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedPages.has(item.id)}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            onSelect(item.id, false);
+                          }}
+                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {item.title}
+                          </p>
+                          <p className="text-xs text-gray-500 truncate">
+                            {item.url}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-sm text-gray-600">
+                        {item.size} KB
+                      </span>
+                    </div>
+                  );
+                } else if (item.type === "group") {
+                  // Render group
+                  const isExpanded = expandedGroups.has(item.id);
+                  const groupStatus = getGroupStatus(item, selectedPages);
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="border border-gray-200 rounded-lg"
+                    >
+                      <div
+                        className="flex items-center justify-between p-3 bg-gray-50"
+                        onClick={() => toggleExpand(item.id)}
+                      >
+                        <div className="flex items-center space-x-3 flex-1">
+                          <input
+                            type="checkbox"
+                            checked={groupStatus === "all"}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              onSelect(item.id, true);
+                            }}
+                            ref={(el) => (groupRefs.current[item.id] = el)}
+                            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">
+                              {item.title}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {item.pageCount} pages
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-sm text-gray-600">
+                            {item.size} KB
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleExpand(item.id);
+                            }}
+                            className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-600"
+                          >
+                            {isExpanded ? (
+                              <svg
+                                width="16"
+                                height="16"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <polyline points="6,9 12,15 18,9"></polyline>
+                              </svg>
+                            ) : (
+                              <svg
+                                width="16"
+                                height="16"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <polyline points="9,18 15,12 9,6"></polyline>
+                              </svg>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                      {isExpanded && (
+                        <div className="border-t border-gray-200 p-2">
+                          <div className="space-y-1">
+                            {item.pages.map((page) => (
+                              <div
+                                key={page.id}
+                                className="flex items-center justify-between p-2 hover:bg-gray-100 rounded cursor-pointer"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onSelect(page.id, false);
+                                }}
+                              >
+                                <div className="flex items-center space-x-3">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedPages.has(page.id)}
+                                    onChange={(e) => {
+                                      e.stopPropagation();
+                                      onSelect(page.id, false);
+                                    }}
+                                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-gray-900 truncate">
+                                      {page.title}
+                                    </p>
+                                    <p className="text-xs text-gray-500 truncate">
+                                      {page.url}
+                                    </p>
+                                  </div>
+                                </div>
+                                <span className="text-sm text-gray-600">
+                                  {page.size} KB
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+              })}
+            </div>
+          );
+        };
+
+        const modalTotalSize = modalData
+          ? getAllPages(modalData.hierarchy)
+              .filter((page) => selectedModalPages.has(page.id))
+              .reduce((sum, page) => sum + page.size, 0)
+          : 0;
+
+        const mainListTotalSize = knowledgeSources.reduce((sum, item) => {
+          if (item.type === "crawled_website") {
+            return (
+              sum + item.pages.reduce((pageSum, page) => pageSum + page.size, 0)
+            );
+          }
+          return sum + item.size;
+        }, 0);
+
+        return (
+          <div className="h-screen flex flex-col">
+            {/* Header */}
+            <div className="bg-white border-b border-gray-200 px-6 py-4">
+              <div className="flex items-center justify-between max-w-6xl mx-auto">
+                <div className="flex items-center space-x-6">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center">
+                      <span className="text-white font-bold text-sm">E</span>
+                    </div>
+                    <span className="font-semibold text-gray-900">Enjo</span>
+                  </div>
+
+                  <div className="flex items-center space-x-8">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-6 h-6 bg-indigo-600 rounded-full flex items-center justify-center">
+                        <Check size={12} className="text-white" />
+                      </div>
+                      <span className="text-sm font-medium text-gray-900">
+                        Customize Agent
+                      </span>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <div className="w-6 h-6 bg-indigo-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
+                        2
+                      </div>
+                      <span className="text-sm font-medium text-indigo-600">
+                        Add Knowledge
+                      </span>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <div className="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center text-gray-500 text-xs font-bold">
+                        3
+                      </div>
+                      <span className="text-sm font-medium text-gray-400">
+                        Choose Personality
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Main Content Area */}
+            <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
+              <div className="w-full max-w-2xl mx-auto">
+                {/* Title */}
+                <div className="text-center mb-8">
+                  <div className="flex items-center justify-center mb-4">
+                    <FileText size={32} className="text-indigo-600" />
+                  </div>
+                  <h1 className="text-2xl font-bold text-gray-900 mb-2">
+                    Add Your Knowledge
+                  </h1>
+                  <p className="text-gray-600">
+                    Enter one URL to quickly train your agent. You can add more
+                    pages and sources later testing
+                  </p>
+                </div>
+
+                {/* Source Selection & Input */}
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+                  {/* Primary Tabs */}
+                  <div className="flex space-x-1 mb-6 bg-gray-100 rounded-lg p-1">
+                    <button
+                      onClick={() => setActiveSource("website")}
+                      className={`flex-1 flex items-center justify-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                        activeSource === "website"
+                          ? "bg-white text-gray-900 shadow-sm"
+                          : "text-gray-500 hover:text-gray-700"
+                      }`}
+                    >
+                      <Globe size={16} />
+                      <span>Website</span>
+                    </button>
+                    <button
+                      onClick={() => setActiveSource("file")}
+                      className={`flex-1 flex items-center justify-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                        activeSource === "file"
+                          ? "bg-white text-gray-900 shadow-sm"
+                          : "text-gray-500 hover:text-gray-700"
+                      }`}
+                    >
+                      <Upload size={16} />
+                      <span>File</span>
+                    </button>
+                  </div>
+
+                  {/* Website Input */}
+                  {activeSource === "website" && (
+                    <div className="space-y-4">
+                      {/* Secondary Tabs for Website */}
+                      <div className="flex">
+                        <button
+                          onClick={() => setWebsiteInputMode("crawl")}
+                          className={`px-4 py-2 text-sm font-medium transition-colors ${
+                            websiteInputMode === "crawl"
+                              ? "text-gray-900 border-b-2 border-indigo-600"
+                              : "text-gray-500 hover:text-gray-700"
+                          }`}
+                        >
+                          Crawl Website
+                        </button>
+                        <button
+                          onClick={() => setWebsiteInputMode("single")}
+                          className={`px-4 py-2 text-sm font-medium transition-colors ${
+                            websiteInputMode === "single"
+                              ? "text-gray-900 border-b-2 border-indigo-600"
+                              : "text-gray-500 hover:text-gray-700"
+                          }`}
+                        >
+                          Add Single Page
+                        </button>
+                      </div>
+
+                      {/* Input based on sub-tab */}
+                      {websiteInputMode === "crawl" && (
+                        <div className="relative">
+                          <input
+                            type="url"
+                            value={websiteUrl}
+                            onChange={(e) => setWebsiteUrl(e.target.value)}
+                            placeholder="https://docs.enjo.ai"
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                          />
+                          <button
+                            onClick={handleWebsiteCrawl}
+                            disabled={isProcessing || !websiteUrl.trim()}
+                            className="absolute right-2 top-2 px-4 py-1 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isProcessing ? (
+                              <Loader2 size={16} className="animate-spin" />
+                            ) : (
+                              "Crawl"
+                            )}
+                          </button>
+                        </div>
+                      )}
+
+                      {websiteInputMode === "single" && (
+                        <div className="relative">
+                          <input
+                            type="url"
+                            value={singlePageUrl}
+                            onChange={(e) => setSinglePageUrl(e.target.value)}
+                            placeholder="https://docs.enjo.ai/page"
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                          />
+                          <button
+                            onClick={handleAddSinglePage}
+                            disabled={isProcessing || !singlePageUrl.trim()}
+                            className="absolute right-2 top-2 px-4 py-1 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isProcessing ? (
+                              <Loader2 size={16} className="animate-spin" />
+                            ) : (
+                              "Add"
+                            )}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* File Upload */}
+                  {activeSource === "file" && (
+                    <div className="space-y-4">
+                      <div
+                        onClick={() => fileInputRef.current?.click()}
+                        className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-gray-400 cursor-pointer transition-colors"
+                      >
+                        <Upload
+                          size={32}
+                          className="text-gray-400 mx-auto mb-4"
+                        />
+                        <p className="text-sm font-medium text-gray-900 mb-1">
+                          Click to upload or drag and drop
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          PDF, DOC, TXT files up to 400 KB
+                        </p>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept=".pdf,.doc,.docx,.txt"
+                          onChange={handleFileUpload}
+                          className="hidden"
+                          multiple
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Unified List of Selected Knowledge */}
+                {knowledgeSources.length > 0 && (
+                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+                    <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                      Selected Knowledge
+                    </h2>
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {knowledgeSources.map((item) => {
+                        if (item.type === "crawled_website") {
+                          const crawledPagesCount = item.pages.length;
+                          const crawledPagesSize = item.pages.reduce(
+                            (sum, p) => sum + p.size,
+                            0
+                          );
+                          return (
+                            <div
+                              key={item.id}
+                              className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors group cursor-pointer"
+                              onClick={() => openWebsiteModal(item)}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-3">
+                                  <Link size={16} className="text-indigo-600" />
+                                  <div>
+                                    <p className="text-sm font-medium text-gray-900 truncate">
+                                      {getDomain(item.url)}
+                                    </p>
+                                    <p className="text-xs text-gray-500">
+                                      {crawledPagesCount} pages
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <span className="text-sm text-gray-600">
+                                    {crawledPagesSize} KB
+                                  </span>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      removeSource(item.id);
+                                    }}
+                                    className="w-6 h-6 flex items-center justify-center rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                  >
+                                    <span className="text-red-600 text-lg leading-none">
+                                      -
+                                    </span>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div
+                            key={item.id}
+                            className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors group"
+                          >
+                            <div className="flex items-center space-x-3">
+                              {item.type === "single_page" ? (
+                                <Link size={16} className="text-indigo-600" />
+                              ) : (
+                                <FileText
+                                  size={16}
+                                  className="text-green-600"
+                                />
+                              )}
+                              <div>
+                                <p className="text-sm font-medium text-gray-900 truncate max-w-sm">
+                                  {item.type === "single_page"
+                                    ? getDomain(item.url)
+                                    : item.name}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {item.type === "single_page" ? item.url : ""}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-sm text-gray-600">
+                                {item.size} KB
+                              </span>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeSource(item.id);
+                                }}
+                                className="w-6 h-6 flex items-center justify-center rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <span className="text-red-600 text-lg leading-none">
+                                  -
+                                </span>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="text-right mt-4">
+                      <span className="text-sm text-gray-600">
+                        Total: {knowledgeSources.length} items (
+                        {mainListTotalSize} KB / 400 KB)
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Pro Tip */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8">
+                  <div className="flex items-start space-x-2">
+                    <div className="w-5 h-5 text-blue-600 mt-0.5">💡</div>
+                    <p className="text-sm text-blue-800">
+                      <strong>Pro tip:</strong> You can add more sources later —
+                      FAQs, apps, or audio/video.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons Section */}
+            <div className="bg-white border-t border-gray-200 px-6 py-4">
+              <div className="w-full max-w-2xl mx-auto flex items-center justify-between">
+                <button className="px-6 py-2 text-gray-600 hover:text-gray-800 font-medium">
+                  Choose Template
+                </button>
+
+                <div className="flex items-center space-x-4">
+                  <button className="px-6 py-2 text-gray-600 hover:text-gray-800 font-medium">
+                    Skip
+                  </button>
+
+                  <button
+                    onClick={handleStartTraining}
+                    disabled={isTrainButtonDisabled()}
+                    className="px-8 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                  >
+                    {isProcessing ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        <span>Processing...</span>
+                      </>
+                    ) : (
+                      <span>Start Training</span>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Website Pages Modal */}
+            {isWebsiteModalOpen && modalData?.type === "crawled_website" && (
+              <div className="modal-overlay">
+                <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl max-h-[80vh] flex flex-col">
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-lg font-semibold text-gray-900">
+                      {crawlStatus === "tooManyPages"
+                        ? `Too Many Pages Found`
+                        : `Edit ${getDomain(modalData.url)}`}
+                    </h2>
+                    <button
+                      onClick={() => setIsWebsiteModalOpen(false)}
+                      className="text-gray-400 hover:text-gray-600"
+                    >
+                      <X size={24} />
+                    </button>
+                  </div>
+
+                  <p className="text-sm text-gray-600 mb-4">
+                    {crawlStatus === "tooManyPages"
+                      ? `Your crawl found too many pages (${
+                          getAllPages(modalData.hierarchy).length
+                        }). Please select up to 10 pages to add to your knowledge base.`
+                      : `Review the pages found during the crawl. You can select or deselect pages.`}
+                  </p>
+
+                  <div className="border border-gray-200 rounded-lg p-4 flex-1 overflow-y-auto">
+                    <HierarchicalPageList
+                      items={modalData.hierarchy}
+                      onSelect={toggleModalPageSelection}
+                      selectedPages={selectedModalPages}
+                    />
+                  </div>
+
+                  <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-200">
+                    <span className="text-sm text-gray-600">
+                      Selected: {selectedModalPages.size} pages (
+                      {modalTotalSize} KB / 400 KB)
+                    </span>
+                    <button
+                      onClick={handleModalSave}
+                      disabled={
+                        selectedModalPages.size === 0 ||
+                        (crawlStatus === "tooManyPages" &&
+                          selectedModalPages.size > 10)
+                      }
+                      className="px-6 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Save Selection
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      };
+
+      ReactDOM.render(<KnowledgeOnboarding />, document.getElementById("root"));
+    </script>
+  </body>
+</html>
